@@ -20,6 +20,8 @@ node_modules/
 **/*.crt
 **/*.cer
 **/*.jks
+**/serviceAccountKey*.json
+**/service-account*.json
 
 # Local database files
 **/*.sqlite
@@ -49,3 +51,4 @@ out/
 .idea/
 .DS_Store
 Thumbs.db
+serviceAccountKey.json
