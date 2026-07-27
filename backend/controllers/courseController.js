@@ -6,7 +6,7 @@
 // Students can enroll in courses.
 // ============================================================
 
-const { db } = require("../config/firebase");
+const { db, admin } = require("../config/firebase");
 
 // ─────────────────────────────────────────
 // CREATE a new course (Lecturer/Admin only)
@@ -15,7 +15,7 @@ const { db } = require("../config/firebase");
 const createCourse = async (req, res) => {
   try {
     const { title, code, department, description } = req.body;
-    const lecturerId = req.user.id;
+    const lecturerId = req.user.id || req.user.uid;
     const lecturerName = req.user.name;
 
     if (!title || !code) {
@@ -36,11 +36,14 @@ const createCourse = async (req, res) => {
 
     const newCourse = {
       title,
+      name: title,
       code: code.toUpperCase(),
       department: department || "",
       description: description || "",
       lecturerId,
       lecturerName,
+      enrolledStudents: [],
+      enrollmentCount: 0,
       createdAt: new Date().toISOString(),
       isActive: true,
     };
@@ -64,15 +67,20 @@ const createCourse = async (req, res) => {
 // ─────────────────────────────────────────
 const getAllCourses = async (req, res) => {
   try {
-    const { role, id } = req.user;
-    let query = db.collection("courses").where("isActive", "==", true);
+    const { role, id, uid } = req.user;
+    const userId = id || uid;
+    let query = db.collection("courses");
 
     // Lecturers only see their own courses
-    if (role === "lecturer") {
-      query = query.where("lecturerId", "==", id);
+    if (role && role.toLowerCase() === "lecturer") {
+      query = query.where("lecturerId", "==", userId);
     }
     const snapshot = await query.get();
-    const courses = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const courses = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((course) => course.isActive !== false);
+
+    console.log(`[getAllCourses] role=${role} userId=${userId} total docs=${snapshot.size} after filter=${courses.length}`);
 
     res.status(200).json({ success: true, courses });
   } catch (error) {
@@ -88,7 +96,7 @@ const getAllCourses = async (req, res) => {
 const enrollStudent = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const studentId = req.user.id;
+    const studentId = req.user.id || req.user.uid;
     const studentName = req.user.name;
 
     // Check course exists
@@ -112,9 +120,10 @@ const enrollStudent = async (req, res) => {
     }
 
     // Create enrollment
+    const courseTitle = courseDoc.data().title || courseDoc.data().name || "";
     const enrollment = {
       courseId,
-      courseTitle: courseDoc.data().title,
+      courseTitle,
       courseCode: courseDoc.data().code,
       studentId,
       studentName,
@@ -123,9 +132,15 @@ const enrollStudent = async (req, res) => {
 
     const enrollRef = await db.collection("enrollments").add(enrollment);
 
+    // Sync enrolledStudents array and enrollmentCount on the course document
+    await db.collection("courses").doc(courseId).update({
+      enrolledStudents: admin.firestore.FieldValue.arrayUnion(studentId),
+      enrollmentCount: admin.firestore.FieldValue.increment(1),
+    }).catch((err) => console.warn("Could not update course enrollment arrays:", err.message));
+
     res.status(201).json({
       success: true,
-      message: `Successfully enrolled in ${courseDoc.data().title}!`,
+      message: `Successfully enrolled in ${courseTitle}!`,
       enrollment: { id: enrollRef.id, ...enrollment },
     });
   } catch (error) {
@@ -140,7 +155,7 @@ const enrollStudent = async (req, res) => {
 // ─────────────────────────────────────────
 const getMyCourses = async (req, res) => {
   try {
-    const studentId = req.user.id;
+    const studentId = req.user.id || req.user.uid;
 
     const enrollmentSnapshot = await db
       .collection("enrollments")
@@ -160,3 +175,4 @@ const getMyCourses = async (req, res) => {
 };
 
 module.exports = { createCourse, getAllCourses, enrollStudent, getMyCourses };
+

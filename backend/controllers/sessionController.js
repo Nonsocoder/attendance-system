@@ -36,7 +36,8 @@ const createSession = async (req, res) => {
     }
 
     const courseData = courseDoc.data();
-    if (courseData.lecturerId !== req.user.uid && req.user.role !== "admin") {
+    const lecturerUserId = req.user.id || req.user.uid;
+    if (courseData.lecturerId !== lecturerUserId && req.user.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "You can only create sessions for your own courses.",
@@ -78,7 +79,7 @@ const createSession = async (req, res) => {
       courseId,
       courseCode: courseData.code,
       courseName: courseData.name,
-      lecturerId: req.user.uid,
+      lecturerId: req.user.id || req.user.uid,
       lecturerName: req.user.name,
       topic: topic || "Lecture",
       venue: venue || "",
@@ -129,18 +130,19 @@ const getSessionsByCourse = async (req, res) => {
     const snapshot = await db
       .collection("sessions")
       .where("courseId", "==", courseId)
-      .orderBy("createdAt", "desc")
       .get();
 
-    const sessions = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      // Don't send the QR code image in list view (too much data)
-      const { qrCode, qrPayload, ...sessionWithoutQR } = data;
-      return {
-        ...sessionWithoutQR,
-        hasExpired: new Date() > new Date(data.expiresAt),
-      };
-    });
+    const sessions = snapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        // Don't send the QR code image in list view (too much data)
+        const { qrCode, qrPayload, ...sessionWithoutQR } = data;
+        return {
+          ...sessionWithoutQR,
+          hasExpired: new Date() > new Date(data.expiresAt),
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     res.json({
       success: true,
@@ -209,7 +211,7 @@ const refreshQRCode = async (req, res) => {
     const session = sessionDoc.data();
 
     // Only the lecturer who owns this session can refresh it
-    if (session.lecturerId !== req.user.uid && req.user.role !== "admin") {
+    if (session.lecturerId !== (req.user.id || req.user.uid) && req.user.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "You can only refresh QR codes for your own sessions.",

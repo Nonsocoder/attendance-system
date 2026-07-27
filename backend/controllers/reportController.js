@@ -26,9 +26,10 @@ const getCourseReport = async (req, res) => {
     const sessionsSnapshot = await db
       .collection("sessions")
       .where("courseId", "==", courseId)
-      .orderBy("createdAt", "asc")
       .get();
-    const sessions = sessionsSnapshot.docs.map((doc) => doc.data());
+    const sessions = sessionsSnapshot.docs
+      .map((doc) => doc.data())
+      .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
     const totalSessions = sessions.length;
 
     if (totalSessions === 0) {
@@ -130,7 +131,7 @@ const getStudentReport = async (req, res) => {
     const { studentId } = req.params;
 
     // Students can only view their own reports
-    if (req.user.role === "student" && req.user.uid !== studentId) {
+    if (req.user.role === "student" && (req.user.id || req.user.uid) !== studentId) {
       return res.status(403).json({
         success: false,
         message: "You can only view your own reports.",
@@ -226,9 +227,10 @@ const exportCourseCSV = async (req, res) => {
     const sessionsSnapshot = await db
       .collection("sessions")
       .where("courseId", "==", courseId)
-      .orderBy("createdAt", "asc")
       .get();
-    const sessions = sessionsSnapshot.docs.map((doc) => doc.data());
+    const sessions = sessionsSnapshot.docs
+      .map((doc) => doc.data())
+      .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
     const attendanceSnapshot = await db
       .collection("attendance")

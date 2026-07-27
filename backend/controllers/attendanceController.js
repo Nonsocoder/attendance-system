@@ -248,15 +248,16 @@ const getSessionAttendance = async (req, res) => {
 // ─────────────────────────────────────────
 const getMyAttendance = async (req, res) => {
   try {
-    const studentId = req.user.id;
+    const studentId = req.user.id || req.user.uid;
 
     const snapshot = await db
       .collection("attendance")
       .where("studentId", "==", studentId)
-      .orderBy("markedAt", "desc")
       .get();
 
-    const records = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const records = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => new Date(b.markedAt || 0) - new Date(a.markedAt || 0));
 
     res.status(200).json({ success: true, records });
   } catch (error) {
@@ -332,10 +333,11 @@ const getCourseSessions = async (req, res) => {
     const snapshot = await db
       .collection("sessions")
       .where("courseId", "==", courseId)
-      .orderBy("createdAt", "desc")
       .get();
 
-    const sessions = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const sessions = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     res.status(200).json({ success: true, sessions });
   } catch (error) {

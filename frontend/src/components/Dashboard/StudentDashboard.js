@@ -23,18 +23,35 @@ const StudentDashboard = () => {
   const [loading, setLoading] = useState(true);
 
   // ── Load all data ──────────────────────────────────────────
+  // Using Promise.allSettled so that a failure in one endpoint
+  // does NOT blank out the rest of the dashboard.
   const loadData = useCallback(async () => {
     try {
-      const [coursesData, myCoursesData, attendanceData] = await Promise.all([
+      const [coursesResult, myCoursesResult, attendanceResult] = await Promise.allSettled([
         courseAPI.getAll(),
         courseAPI.getMyCourses(),
         attendanceAPI.getMyAttendance(),
       ]);
-      setAllCourses(coursesData.courses);
-      setMyCourses(myCoursesData.courses);
-      setAttendance(attendanceData.records);
+
+      if (coursesResult.status === "fulfilled") {
+        setAllCourses(coursesResult.value.courses || []);
+      } else {
+        console.error("Failed to load all courses:", coursesResult.reason);
+      }
+
+      if (myCoursesResult.status === "fulfilled") {
+        setMyCourses(myCoursesResult.value.courses || []);
+      } else {
+        console.error("Failed to load my courses:", myCoursesResult.reason);
+      }
+
+      if (attendanceResult.status === "fulfilled") {
+        setAttendance(attendanceResult.value.records || []);
+      } else {
+        console.error("Failed to load attendance:", attendanceResult.reason);
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Error loading dashboard data:", err);
     } finally {
       setLoading(false);
     }
@@ -69,15 +86,15 @@ const StudentDashboard = () => {
   };
 
   // ── Derived data ───────────────────────────────────────────
-  const enrolledCourseIds = myCourses.map((c) => c.courseId);
-  const unenrolledCourses = allCourses.filter(
-    (c) => !enrolledCourseIds.includes(c.id),
+  const enrolledCourseIds = (myCourses || []).map((c) => c.courseId || c.id);
+  const unenrolledCourses = (allCourses || []).filter(
+    (c) => !enrolledCourseIds.includes(c.id || c.courseId),
   );
 
   // Per-course attendance count for each enrolled course
-  const coursesWithStats = myCourses.map((course) => ({
+  const coursesWithStats = (myCourses || []).map((course) => ({
     ...course,
-    attended: attendance.filter((a) => a.courseId === course.courseId).length,
+    attended: (attendance || []).filter((a) => a.courseId === (course.courseId || course.id)).length,
   }));
 
   return (
@@ -305,12 +322,17 @@ const StudentDashboard = () => {
         {/* ══ ENROLL TAB ══ */}
         {activeTab === "enroll" && (
           <div>
-            <p className="hint">
-              {unenrolledCourses.length === 0
-                ? "You are enrolled in all currently available courses."
-                : `${unenrolledCourses.length} course(s) available to enroll in:`}
-            </p>
-            {unenrolledCourses.length === 0 ? (
+            {loading ? (
+              <div className="loading">Loading available courses...</div>
+            ) : allCourses.length === 0 ? (
+              <div className="empty-state">
+                <span>📭</span>
+                <p>No courses have been created yet.</p>
+                <p style={{ fontSize: "13px", color: "var(--text-light)" }}>
+                  Ask your lecturer to create a course first.
+                </p>
+              </div>
+            ) : unenrolledCourses.length === 0 ? (
               <div className="empty-state">
                 <span>🎉</span>
                 <p>You are enrolled in all available courses!</p>
@@ -322,21 +344,26 @@ const StudentDashboard = () => {
                 </button>
               </div>
             ) : (
-              <div className="courses-grid">
-                {unenrolledCourses.map((course) => (
-                  <div key={course.id} className="course-card">
-                    <div className="course-code">{course.code}</div>
-                    <h3>{course.title}</h3>
-                    <p>{course.department}</p>
-                    <p className="lecturer">👨‍🏫 {course.lecturerName}</p>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => handleEnroll(course.id, course.title)}
-                    >
-                      Enroll
-                    </button>
-                  </div>
-                ))}
+              <div>
+                <p className="hint">
+                  {unenrolledCourses.length} course(s) available to enroll in:
+                </p>
+                <div className="courses-grid">
+                  {unenrolledCourses.map((course) => (
+                    <div key={course.id} className="course-card">
+                      <div className="course-code">{course.code}</div>
+                      <h3>{course.title || course.name}</h3>
+                      <p>{course.department}</p>
+                      <p className="lecturer">👨‍🏫 {course.lecturerName}</p>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => handleEnroll(course.id, course.title || course.name)}
+                      >
+                        Enroll
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

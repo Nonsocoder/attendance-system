@@ -26,9 +26,8 @@ const verifyToken = (req, res, next) => {
   }
 
   try {
-    // Verify the token using our secret key
-    // This decodes the token and checks it hasn't been tampered with
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret_key_12345";
+    const decoded = jwt.verify(token, JWT_SECRET);
 
     // Attach the decoded user info to the request
     // Now any route handler can access req.user to know who is making the request

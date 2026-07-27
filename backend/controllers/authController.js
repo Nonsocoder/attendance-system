@@ -11,6 +11,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { db } = require("../config/firebase");
+const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret_key_12345";
 
 // ─────────────────────────────────────────
 // REGISTER a new user
@@ -72,7 +73,7 @@ const register = async (req, res) => {
     // 7. Create a JWT token so they're logged in immediately after registering
     const token = jwt.sign(
       { id: userRef.id, email, role, name },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "7d" } // Token valid for 7 days
     );
 
@@ -152,7 +153,7 @@ const login = async (req, res) => {
     // 5. Create JWT token
     const token = jwt.sign(
       { id: userDoc.id, email: userData.email, role: userData.role, name: userData.name },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "7d" }
     );
 
