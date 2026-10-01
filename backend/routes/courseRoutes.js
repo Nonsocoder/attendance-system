@@ -5,6 +5,7 @@ const {
   getAllCourses,
   enrollStudent,
   getMyCourses,
+  deleteCourse,
 } = require("../controllers/courseController");
 const { verifyToken, requireRole } = require("../middleware/auth");
 
@@ -15,5 +16,6 @@ router.get("/", getAllCourses);
 router.post("/", requireRole("lecturer", "admin"), createCourse);
 router.get("/my-courses", requireRole("student"), getMyCourses);
 router.post("/:courseId/enroll", requireRole("student"), enrollStudent);
+router.delete("/:courseId", requireRole("lecturer", "admin"), deleteCourse);
 
 module.exports = router;

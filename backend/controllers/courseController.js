@@ -174,5 +174,48 @@ const getMyCourses = async (req, res) => {
   }
 };
 
-module.exports = { createCourse, getAllCourses, enrollStudent, getMyCourses };
+
+const deleteCourse = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.id || req.user.uid;
+    const role = req.user.role?.toLowerCase();
+
+    const courseRef = db.collection("courses").doc(courseId);
+    const courseDoc = await courseRef.get();
+
+    if (!courseDoc.exists) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Course not found." });
+    }
+
+    if (role === "lecturer" && courseDoc.data().lecturerId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to delete this course.",
+      });
+    }
+
+    const batch = db.batch();
+
+    const enrollments = await db
+      .collection("enrollments")
+      .where("courseId", "==", courseId)
+      .get();
+    enrollments.docs.forEach((doc) => batch.delete(doc.ref));
+
+    batch.delete(courseRef);
+    await batch.commit();
+
+    res
+      .status(200)
+      .json({ success: true, message: "Course deleted successfully." });
+  } catch (error) {
+    console.error("Delete course error:", error);
+    res.status(500).json({ success: false, message: "Server error." });
+  }
+};
+
+module.exports = { createCourse, getAllCourses, enrollStudent, getMyCourses, deleteCourse };
 

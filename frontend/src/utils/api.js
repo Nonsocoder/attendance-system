@@ -50,6 +50,7 @@ export const courseAPI = {
   getMyCourses: () => request("/courses/my-courses"),
   enroll: (courseId) =>
     request(`/courses/${courseId}/enroll`, { method: "POST" }),
+  deleteCourse: (courseId) => request(`/courses/${courseId}`, { method: "DELETE" }),
 };
 
 // ─── ATTENDANCE ────────────────────────────────────────

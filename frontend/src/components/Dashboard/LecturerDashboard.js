@@ -11,7 +11,12 @@ const LecturerDashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [showCreateCourse, setShowCreateCourse] = useState(false);
-  const [newCourse, setNewCourse] = useState({ title: "", code: "", department: "", description: "" });
+  const [newCourse, setNewCourse] = useState({
+    title: "",
+    code: "",
+    department: "",
+    description: "",
+  });
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -43,6 +48,21 @@ const LecturerDashboard = () => {
     }
   };
 
+  const handleDeleteCourse = async (course) => {
+    const courseToDelete = course || selectedCourse;
+    if (!courseToDelete) return;
+
+    try {
+      await courseAPI.deleteCourse(courseToDelete.id);
+      setMessage(`Course "${courseToDelete.title}" deleted successfully!`);
+      if (selectedCourse && selectedCourse.id === courseToDelete.id) {
+        setSelectedCourse(null);
+      }
+      loadCourses();
+    } catch (err) {
+      setMessage(err.message);
+    }
+  };
   return (
     <div className="dashboard">
       {/* Sidebar */}
@@ -74,7 +94,9 @@ const LecturerDashboard = () => {
             </button>
           ))}
         </nav>
-        <button className="btn-logout" onClick={logout}>🚪 Logout</button>
+        <button className="btn-logout" onClick={logout}>
+          🚪 Logout
+        </button>
       </aside>
 
       {/* Main Content */}
@@ -117,10 +139,16 @@ const LecturerDashboard = () => {
             <div className="card">
               <h2>Quick Actions</h2>
               <div className="quick-actions">
-                <button className="action-btn" onClick={() => setActiveTab("courses")}>
+                <button
+                  className="action-btn"
+                  onClick={() => setActiveTab("courses")}
+                >
                   <span>📚</span> Manage Courses
                 </button>
-                <button className="action-btn" onClick={() => setActiveTab("sessions")}>
+                <button
+                  className="action-btn"
+                  onClick={() => setActiveTab("sessions")}
+                >
                   <span>➕</span> Start New Session
                 </button>
               </div>
@@ -132,7 +160,10 @@ const LecturerDashboard = () => {
         {activeTab === "courses" && (
           <div>
             <div className="tab-actions">
-              <button className="btn btn-primary" onClick={() => setShowCreateCourse(true)}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowCreateCourse(true)}
+              >
                 + New Course
               </button>
             </div>
@@ -145,18 +176,24 @@ const LecturerDashboard = () => {
                     <div className="form-group">
                       <label>Course Title</label>
                       <input
-                        type="text" placeholder="e.g. Introduction to Programming"
+                        type="text"
+                        placeholder="e.g. Introduction to Programming"
                         value={newCourse.title}
-                        onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })}
+                        onChange={(e) =>
+                          setNewCourse({ ...newCourse, title: e.target.value })
+                        }
                         required
                       />
                     </div>
                     <div className="form-group">
                       <label>Course Code</label>
                       <input
-                        type="text" placeholder="e.g. CSC101"
+                        type="text"
+                        placeholder="e.g. CSC101"
                         value={newCourse.code}
-                        onChange={(e) => setNewCourse({ ...newCourse, code: e.target.value })}
+                        onChange={(e) =>
+                          setNewCourse({ ...newCourse, code: e.target.value })
+                        }
                         required
                       />
                     </div>
@@ -164,14 +201,28 @@ const LecturerDashboard = () => {
                   <div className="form-group">
                     <label>Department</label>
                     <input
-                      type="text" placeholder="e.g. Computer Science"
+                      type="text"
+                      placeholder="e.g. Computer Science"
                       value={newCourse.department}
-                      onChange={(e) => setNewCourse({ ...newCourse, department: e.target.value })}
+                      onChange={(e) =>
+                        setNewCourse({
+                          ...newCourse,
+                          department: e.target.value,
+                        })
+                      }
                     />
                   </div>
                   <div className="form-actions">
-                    <button type="submit" className="btn btn-primary">Create Course</button>
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowCreateCourse(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary">
+                      Create Course
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setShowCreateCourse(false)}
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </form>
               </div>
@@ -194,15 +245,31 @@ const LecturerDashboard = () => {
                     <div className="course-actions">
                       <button
                         className="btn btn-sm btn-primary"
-                        onClick={() => { setSelectedCourse(course); setActiveTab("sessions"); }}
+                        onClick={() => {
+                          setSelectedCourse(course);
+                          setActiveTab("sessions");
+                        }}
                       >
                         Manage Sessions
                       </button>
                       <button
                         className="btn btn-sm btn-secondary"
-                        onClick={() => { setSelectedCourse(course); setActiveTab("reports"); }}
+                        onClick={() => {
+                          setSelectedCourse(course);
+                          setActiveTab("reports");
+                        }}
                       >
                         View Reports
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-danger"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCourse(course);
+                        }}
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -233,7 +300,10 @@ const LecturerDashboard = () => {
               </div>
             ) : (
               <div>
-                <button className="btn btn-secondary mb-3" onClick={() => setSelectedCourse(null)}>
+                <button
+                  className="btn btn-secondary mb-3"
+                  onClick={() => setSelectedCourse(null)}
+                >
                   ← Back to Courses
                 </button>
                 <CreateSession course={selectedCourse} />
@@ -244,7 +314,13 @@ const LecturerDashboard = () => {
 
         {activeTab === "reports" && selectedCourse && (
           <div>
-            <button className="btn btn-secondary mb-3" onClick={() => { setActiveTab("courses"); setSelectedCourse(null); }}>
+            <button
+              className="btn btn-secondary mb-3"
+              onClick={() => {
+                setActiveTab("courses");
+                setSelectedCourse(null);
+              }}
+            >
               ← Back
             </button>
             <CourseSummary course={selectedCourse} />
