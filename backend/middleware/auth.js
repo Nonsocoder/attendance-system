@@ -50,7 +50,10 @@ const requireRole = (...roles) => {
       return res.status(401).json({ success: false, message: "Not authenticated." });
     }
 
-    if (!roles.includes(req.user.role)) {
+    const userRole = (req.user.role || "").toLowerCase();
+    const normalizedRoles = roles.map((r) => r.toLowerCase());
+
+    if (!normalizedRoles.includes(userRole)) {
       return res.status(403).json({
         success: false,
         message: `Access denied. Required role: ${roles.join(" or ")}`,

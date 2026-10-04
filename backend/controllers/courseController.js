@@ -69,20 +69,60 @@ const getAllCourses = async (req, res) => {
   try {
     const { role, id, uid } = req.user;
     const userId = id || uid;
+    const normalizedRole = (role || "").toLowerCase();
     let query = db.collection("courses");
 
     // Lecturers only see their own courses
-    if (role && role.toLowerCase() === "lecturer") {
+    if (normalizedRole === "lecturer") {
       query = query.where("lecturerId", "==", userId);
     }
     const snapshot = await query.get();
-    const courses = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .filter((course) => course.isActive !== false);
+    let courses = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+        let enrolledStudents = data.enrolledStudents;
+        let enrollmentCount = data.enrollmentCount;
 
-    console.log(`[getAllCourses] role=${role} userId=${userId} total docs=${snapshot.size} after filter=${courses.length}`);
+        // Ensure enrolledStudents is an array; if missing or empty, verify against enrollments collection
+        if (!Array.isArray(enrolledStudents) || enrolledStudents.length === 0) {
+          const enrollmentsSnapshot = await db
+            .collection("enrollments")
+            .where("courseId", "==", doc.id)
+            .get();
 
-    res.status(200).json({ success: true, courses });
+          if (!enrollmentsSnapshot.empty) {
+            const studentIds = enrollmentsSnapshot.docs.map((d) => d.data().studentId);
+            enrolledStudents = Array.from(new Set(studentIds));
+            enrollmentCount = enrolledStudents.length;
+
+            // Sync course document in Firestore in background
+            db.collection("courses")
+              .doc(doc.id)
+              .update({ enrolledStudents, enrollmentCount })
+              .catch(() => {});
+          } else {
+            enrolledStudents = enrolledStudents || [];
+            enrollmentCount = enrollmentCount || 0;
+          }
+        }
+
+        return {
+          id: doc.id,
+          ...data,
+          enrolledStudents,
+          enrollmentCount: Math.max(enrollmentCount || 0, enrolledStudents.length),
+        };
+      })
+    );
+
+    // Strict in-memory safeguard for lecturer role
+    if (normalizedRole === "lecturer") {
+      courses = courses.filter((c) => c.lecturerId === userId);
+    }
+
+    const activeCourses = courses.filter((course) => course.isActive !== false);
+
+    res.status(200).json({ success: true, courses: activeCourses });
   } catch (error) {
     console.error("Get courses error:", error);
     res.status(500).json({ success: false, message: "Server error." });
@@ -204,6 +244,12 @@ const deleteCourse = async (req, res) => {
       .where("courseId", "==", courseId)
       .get();
     enrollments.docs.forEach((doc) => batch.delete(doc.ref));
+
+    const sessions = await db
+      .collection("sessions")
+      .where("courseId", "==", courseId)
+      .get();
+    sessions.docs.forEach((doc) => batch.delete(doc.ref));
 
     batch.delete(courseRef);
     await batch.commit();

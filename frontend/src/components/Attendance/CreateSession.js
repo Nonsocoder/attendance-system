@@ -3,8 +3,9 @@
 // ============================================================
 import React, { useState, useEffect } from "react";
 import { attendanceAPI } from "../../utils/api";
+import SessionAttendance from "./SessionAttendance";
 
-const CreateSession = ({ course }) => {
+const CreateSession = ({ course, onSessionCreated, onViewAttendance }) => {
   const [form, setForm] = useState({ topic: "", durationMinutes: 15 });
   const [session, setSession] = useState(null);
   const [qrCode, setQrCode] = useState(null);
@@ -12,6 +13,7 @@ const CreateSession = ({ course }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [timeLeft, setTimeLeft] = useState(null);
+  const [selectedSessionId, setSelectedSessionId] = useState(null);
 
   useEffect(() => {
     loadSessions();
@@ -52,6 +54,9 @@ const CreateSession = ({ course }) => {
       setSession(data.session);
       setQrCode(data.qrCode);
       loadSessions();
+      if (onSessionCreated) {
+        onSessionCreated(data.session);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -59,16 +64,11 @@ const CreateSession = ({ course }) => {
     }
   };
 
-  const handleViewAttendance = async (sessionId) => {
-    try {
-      const data = await attendanceAPI.getSessionAttendance(sessionId);
-      alert(
-        `Session: ${data.session.topic}\n` +
-        `Present: ${data.summary.present}/${data.summary.totalEnrolled} students (${data.summary.percentage}%)\n\n` +
-        data.attendance.map((a) => `✅ ${a.studentName} — ${new Date(a.markedAt).toLocaleTimeString()}`).join("\n")
-      );
-    } catch (err) {
-      alert("Could not load attendance: " + err.message);
+  const handleViewAttendance = (sessionId) => {
+    if (onViewAttendance) {
+      onViewAttendance(sessionId);
+    } else {
+      setSelectedSessionId(sessionId);
     }
   };
 
@@ -156,6 +156,21 @@ const CreateSession = ({ course }) => {
           </table>
         )}
       </div>
+
+      {/* Attendance Modal */}
+      {selectedSessionId && (
+        <div className="modal-overlay" onClick={() => setSelectedSessionId(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Session Attendance</h2>
+              <button onClick={() => setSelectedSessionId(null)}>✕</button>
+            </div>
+            <div style={{ padding: "20px" }}>
+              <SessionAttendance sessionId={selectedSessionId} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

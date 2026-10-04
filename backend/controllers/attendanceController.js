@@ -200,10 +200,25 @@ const markAttendance = async (req, res) => {
 const getSessionAttendance = async (req, res) => {
   try {
     const { sessionId } = req.params;
+    const userId = req.user.id || req.user.uid;
+    const role = (req.user.role || "").toLowerCase();
 
     const sessionDoc = await db.collection("sessions").doc(sessionId).get();
     if (!sessionDoc.exists) {
       return res.status(404).json({ success: false, message: "Session not found." });
+    }
+
+    const sessionData = sessionDoc.data();
+
+    // Verify ownership: Admin can see any session; Lecturer can only see their own sessions or sessions for their courses
+    if (role !== "admin" && sessionData.lecturerId !== userId) {
+      const courseDoc = await db.collection("courses").doc(sessionData.courseId).get();
+      if (!courseDoc.exists || courseDoc.data().lecturerId !== userId) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not authorized to view attendance for this session.",
+        });
+      }
     }
 
     // Get all attendance records for this session
@@ -217,21 +232,32 @@ const getSessionAttendance = async (req, res) => {
       ...doc.data(),
     }));
 
-    // Also get total enrolled students for context
+    // Get total enrolled students for context
     const enrolledSnapshot = await db
       .collection("enrollments")
-      .where("courseId", "==", sessionDoc.data().courseId)
+      .where("courseId", "==", sessionData.courseId)
       .get();
+
+    let totalEnrolled = enrolledSnapshot.size;
+    if (totalEnrolled === 0 && sessionData.courseId) {
+      const courseDoc = await db.collection("courses").doc(sessionData.courseId).get();
+      if (courseDoc.exists) {
+        const cData = courseDoc.data();
+        totalEnrolled = Array.isArray(cData.enrolledStudents)
+          ? cData.enrolledStudents.length
+          : cData.enrollmentCount || 0;
+      }
+    }
 
     res.status(200).json({
       success: true,
-      session: { id: sessionId, ...sessionDoc.data() },
+      session: { id: sessionId, ...sessionData },
       attendance: records,
       summary: {
         present: records.length,
-        totalEnrolled: enrolledSnapshot.size,
-        percentage: enrolledSnapshot.size
-          ? Math.round((records.length / enrolledSnapshot.size) * 100)
+        totalEnrolled,
+        percentage: totalEnrolled
+          ? Math.round((records.length / totalEnrolled) * 100)
           : 0,
       },
     });
@@ -273,8 +299,26 @@ const getMyAttendance = async (req, res) => {
 const getCourseSummary = async (req, res) => {
   try {
     const { courseId } = req.params;
+    const userId = req.user.id || req.user.uid;
+    const role = (req.user.role || "").toLowerCase();
 
-    // Get all sessions for this course
+    // 1. Fetch course details & verify authorization
+    const courseDoc = await db.collection("courses").doc(courseId).get();
+    if (!courseDoc.exists) {
+      return res.status(404).json({ success: false, message: "Course not found." });
+    }
+
+    const courseData = courseDoc.data();
+
+    // Lecturer can only access report for their own course. Only admin can see all.
+    if (role !== "admin" && courseData.lecturerId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view the report for this course.",
+      });
+    }
+
+    // 2. Fetch all sessions for this course
     const sessionsSnapshot = await db
       .collection("sessions")
       .where("courseId", "==", courseId)
@@ -282,26 +326,60 @@ const getCourseSummary = async (req, res) => {
 
     const totalSessions = sessionsSnapshot.size;
 
-    // Get all enrolled students
+    // 3. Fetch all enrollments for this course
     const enrollmentsSnapshot = await db
       .collection("enrollments")
       .where("courseId", "==", courseId)
       .get();
 
-    // For each student, count how many sessions they attended
+    // 4. Fetch all attendance records for this course in a single query
+    const attendanceSnapshot = await db
+      .collection("attendance")
+      .where("courseId", "==", courseId)
+      .get();
+
+    // Aggregate attendance counts per student
+    const attendanceCountMap = new Map();
+    attendanceSnapshot.docs.forEach((doc) => {
+      const att = doc.data();
+      const sId = att.studentId;
+      if (sId) {
+        attendanceCountMap.set(sId, (attendanceCountMap.get(sId) || 0) + 1);
+      }
+    });
+
+    // Collect all enrolled students (from enrollments collection and course.enrolledStudents)
+    const studentMap = new Map(); // studentId -> studentName
+
+    enrollmentsSnapshot.docs.forEach((doc) => {
+      const data = doc.data();
+      const sId = data.studentId;
+      if (sId) {
+        studentMap.set(sId, data.studentName || "Student");
+      }
+    });
+
+    const enrolledArray = Array.isArray(courseData.enrolledStudents) ? courseData.enrolledStudents : [];
+    for (const sId of enrolledArray) {
+      if (sId && !studentMap.has(sId)) {
+        try {
+          const userDoc = await db.collection("users").doc(sId).get();
+          if (userDoc.exists) {
+            studentMap.set(sId, userDoc.data().name || userDoc.data().email || "Student");
+          } else {
+            studentMap.set(sId, "Student");
+          }
+        } catch {
+          studentMap.set(sId, "Student");
+        }
+      }
+    }
+
+    // Build the summary array for each student
     const summary = [];
-
-    for (const enrollment of enrollmentsSnapshot.docs) {
-      const { studentId, studentName } = enrollment.data();
-
-      const attendanceSnapshot = await db
-        .collection("attendance")
-        .where("courseId", "==", courseId)
-        .where("studentId", "==", studentId)
-        .get();
-
-      const attended = attendanceSnapshot.size;
-      const percentage = totalSessions
+    for (const [studentId, studentName] of studentMap.entries()) {
+      const attended = attendanceCountMap.get(studentId) || 0;
+      const percentage = totalSessions > 0
         ? Math.round((attended / totalSessions) * 100)
         : 0;
 
@@ -311,14 +389,28 @@ const getCourseSummary = async (req, res) => {
         attended,
         totalSessions,
         percentage,
-        status: percentage >= 75 ? "good" : percentage >= 50 ? "warning" : "poor",
+        status:
+          totalSessions === 0
+            ? "neutral"
+            : percentage >= 75
+            ? "good"
+            : percentage >= 50
+            ? "warning"
+            : "poor",
       });
     }
 
     // Sort by percentage descending
     summary.sort((a, b) => b.percentage - a.percentage);
 
-    res.status(200).json({ success: true, courseId, totalSessions, summary });
+    res.status(200).json({
+      success: true,
+      courseId,
+      courseTitle: courseData.title || courseData.name || "",
+      courseCode: courseData.code || "",
+      totalSessions,
+      summary,
+    });
   } catch (error) {
     console.error("Get course summary error:", error);
     res.status(500).json({ success: false, message: "Server error." });
@@ -329,6 +421,21 @@ const getCourseSummary = async (req, res) => {
 const getCourseSessions = async (req, res) => {
   try {
     const { courseId } = req.params;
+    const userId = req.user.id || req.user.uid;
+    const role = (req.user.role || "").toLowerCase();
+
+    // Verify course exists and ownership if lecturer
+    const courseDoc = await db.collection("courses").doc(courseId).get();
+    if (!courseDoc.exists) {
+      return res.status(404).json({ success: false, message: "Course not found." });
+    }
+
+    if (role !== "admin" && courseDoc.data().lecturerId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view sessions for this course.",
+      });
+    }
 
     const snapshot = await db
       .collection("sessions")
@@ -346,6 +453,70 @@ const getCourseSessions = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────
+// GET all sessions for the logged-in lecturer (or all for admin)
+// GET /api/attendance/sessions or /api/attendance/my-sessions
+// ─────────────────────────────────────────
+const getLecturerSessions = async (req, res) => {
+  try {
+    const lecturerId = req.user.id || req.user.uid;
+    const role = (req.user.role || "").toLowerCase();
+
+    let sessions = [];
+
+    if (role === "admin") {
+      // Admin can see all sessions across all courses & lecturers
+      const snapshot = await db.collection("sessions").get();
+      sessions = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    } else {
+      // Lecturer only sees sessions for their own courses or created by them
+      const coursesSnapshot = await db
+        .collection("courses")
+        .where("lecturerId", "==", lecturerId)
+        .get();
+
+      const ownedCourseIds = new Set(coursesSnapshot.docs.map((d) => d.id));
+
+      const snapshot = await db
+        .collection("sessions")
+        .where("lecturerId", "==", lecturerId)
+        .get();
+
+      const sessionMap = new Map();
+      snapshot.docs.forEach((doc) => {
+        sessionMap.set(doc.id, { id: doc.id, ...doc.data() });
+      });
+
+      // Include sessions by courseId if course is owned by this lecturer
+      if (ownedCourseIds.size > 0) {
+        for (const cId of ownedCourseIds) {
+          const courseSessions = await db
+            .collection("sessions")
+            .where("courseId", "==", cId)
+            .get();
+          courseSessions.docs.forEach((doc) => {
+            sessionMap.set(doc.id, { id: doc.id, ...doc.data() });
+          });
+        }
+      }
+
+      sessions = Array.from(sessionMap.values());
+    }
+
+    // Sort newest first
+    sessions.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+    res.status(200).json({
+      success: true,
+      count: sessions.length,
+      sessions,
+    });
+  } catch (error) {
+    console.error("Get lecturer sessions error:", error);
+    res.status(500).json({ success: false, message: "Server error." });
+  }
+};
+
 module.exports = {
   createSession,
   markAttendance,
@@ -353,4 +524,5 @@ module.exports = {
   getMyAttendance,
   getCourseSummary,
   getCourseSessions,
+  getLecturerSessions,
 };

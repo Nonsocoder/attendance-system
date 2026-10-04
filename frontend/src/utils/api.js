@@ -63,6 +63,8 @@ export const attendanceAPI = {
     request(`/attendance/session/${sessionId}`),
   getCourseSessions: (courseId) =>
     request(`/attendance/sessions/${courseId}`),
+  getAllSessions: () => request("/attendance/sessions"),
+  getMySessions: () => request("/attendance/my-sessions"),
   getMyAttendance: () => request("/attendance/my-attendance"),
   getCourseSummary: (courseId) => request(`/attendance/summary/${courseId}`),
 };

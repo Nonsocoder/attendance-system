@@ -141,9 +141,11 @@ body {
 .stat-card.blue { border-left: 4px solid var(--primary); }
 .stat-card.green { border-left: 4px solid var(--success); }
 .stat-card.orange { border-left: 4px solid var(--warning); }
+.stat-card.purple { border-left: 4px solid #8b5cf6; }
 .stat-icon { font-size: 28px; }
 .stat-number { font-size: 36px; font-weight: 700; font-family: 'Space Grotesk', sans-serif; }
 .stat-label { color: var(--text-light); font-size: 14px; }
+.stat-subtext { color: var(--text-light); font-size: 11px; margin-top: -4px; }
 
 /* ─── Courses Grid ────────────────────────────────────────── */
 .courses-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
@@ -219,6 +221,63 @@ input:focus, select:focus, textarea:focus {
 .badge-success { background: #dcfce7; color: #16a34a; }
 .badge-warning { background: #fef9c3; color: #a16207; }
 .badge-error { background: #fee2e2; color: #dc2626; }
+.badge-secondary { background: #f1f5f9; color: #475569; }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-refresh:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.btn-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.course-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.course-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+.course-meta-badge.students {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+.course-meta-badge.sessions {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
 
 /* ─── Tables ──────────────────────────────────────────────── */
 .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
