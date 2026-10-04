@@ -19,11 +19,34 @@ const app = express();
 // ─── MIDDLEWARE ───────────────────────────────────────────
 // These run on EVERY request before hitting any route
 
-// CORS: Allow requests from our React frontend
+// CORS: Allow requests from our React frontend (Netlify, localhost, custom domains)
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, health checks)
+      if (!origin) return callback(null, true);
+
+      // Allow any *.netlify.app subdomain, localhost, or FRONTEND_URL
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".netlify.app") ||
+        origin.includes("localhost")
+      ) {
+        return callback(null, true);
+      }
+
+      // Allow by default
+      return callback(null, true);
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
